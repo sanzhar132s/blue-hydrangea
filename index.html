@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070c12">
+<title>Голубая гортензия</title>
+<style>
+  :root { color-scheme: dark; background: #070c12; font-family: "Segoe UI", system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { position: relative; height: 100vh; height: 100svh; overflow: hidden; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  button {
+    position: absolute; bottom: max(30px, env(safe-area-inset-bottom)); left: 50%; translate: -50%;
+    min-height: 48px; padding: 0 24px; border: 1px solid #8198a9; border-radius: 30px;
+    background: #0e1923eb; color: #eaf5fb; font: 600 1rem "Segoe UI", system-ui, sans-serif;
+    box-shadow: 0 5px 23px #02060ac4; cursor: pointer; white-space: nowrap;
+    transition: background-color .18s, transform .18s;
+  }
+  button:hover { background: #1e3445; transform: translateY(-2px); }
+  button:active { transform: translateY(1px); }
+  button:focus-visible { outline: 2px solid #b1e4ff; outline-offset: 4px; }
+  @media (prefers-reduced-motion: reduce) { button { display: none; } }
+</style>
+<main aria-label="Голубая гортензия">
+  <canvas width="864" height="1080" role="img" aria-label="Голубые соцветия гортензии постепенно раскрываются"></canvas>
+  <button type="button">Раскрыть гортензию</button>
+</main>
+<script>
+  'use strict';
+  const canvas = document.querySelector('canvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const button = document.querySelector('button');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  const width = 800, height = 1000, tau = Math.PI * 2;
+  const hold = 10.5, duration = 14;
+  const clamp = n => Math.min(1, Math.max(0, n));
+  const smooth = n => { n = clamp(n); return n*n*(3-2*n); };
+  const mix = (a,b,t) => a+(b-a)*t;
+  const lerpColor = (a,b,t) => a.map((v,i) => mix(v,b[i],t));
+  const rgb = c => 'rgb(' + c.map(Math.round).join(',') + ')';
+
+  function random(seed) {
+    return () => {
+      seed = (Math.imul(seed,1664525)+1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+  }
+
+  function bitmap(w,h) {
+    const surface = document.createElement('canvas');
+    surface.width = w;
+    surface.height = h;
+    return surface;
+  }
+
+  const background = bitmap(width,height);
+  {
+    const paint = background.getContext('2d');
+    paint.fillStyle = '#070c12';
+    paint.fillRect(0,0,width,height);
+    paint.save();
+    paint.translate(352,355);
+    paint.scale(1,.88);
+    const halo = paint.createRadialGradient(0,0,4,0,0,510);
+    halo.addColorStop(0,'#202e3d');
+    halo.addColorStop(.48,'#14202c');
+    halo.addColorStop(1,'#070c12');
+    paint.fillStyle = halo;
+    paint.fillRect(-510,-510,1020,1020);
+    paint.restore();
+    const rand = random(912);
+    for (let i=0;i<49000;i++) {
+      paint.fillStyle = rand() < .65 ? '#00000016' : '#b0d6fa0b';
+      paint.fillRect(rand()*width,rand()*height,1,1);
+    }
+    const seam = paint.createLinearGradient(0,0,0,140);
+    seam.addColorStop(0,'#070c12');
+    seam.addColorStop(1,'#070c1200');
+    paint.fillStyle = seam;
+    paint.fillRect(0,0,width,140);
+  }
+
+  const pigments = [
+    [[30,66,113],[77,145,199],[150,203,237]],
+    [[39,80,121],[98,156,203],[185,220,242]],
+    [[45,82,133],[111,166,212],[176,208,241]],
+    [[23,60,107],[56,130,185],[121,184,222]]
+  ];
+  const atlas = pigments.map((palette,tone) =>
+    Array.from({length:6},(_,variant) =>
+      Array.from({length:7},(_,light) => makeFloret(palette, tone, variant, light/6))));
+
+  function makeFloret(palette,tone,variant,light) {
+    const surface = bitmap(128,128);
+    const p = surface.getContext('2d');
+    const rand = random(828+variant*63+tone*15);
+    const count = variant === 5 ? 5 : 4;
+    const factor = .56+.44*light;
+    p.translate(64,64);
+    for (let i=0;i<count;i++) {
+      p.save();
+      p.rotate((i+.06*(rand()-.5))*tau/count+.08);
+      p.scale(.83+.25*rand(),.84+.16*rand());
+      const edge = 48 + 8*rand();
+      const broad = 22 + 6*rand();
+      const path = new Path2D();
+      path.moveTo(-1,3);
+      path.bezierCurveTo(-6,-8,-broad-3,-18,-broad,-36);
+      path.bezierCurveTo(-broad+1,-edge,-11,-edge-3,-4,-edge);
+      path.bezierCurveTo(2,-edge+2,5,-edge-1,11,-edge+.5);
+      path.bezierCurveTo(broad+1,-edge+5,broad+5,-30,broad-3,-21);
+      path.bezierCurveTo(16,-12,8,-3,-1,3);
+      const litSide = Math.cos(i*tau/count+.52);
+      const saturation = .20+rand()*.29;
+      const top = lerpColor(palette[2],[229,244,250],(.12+.42*light)*(.71+.29*litSide));
+      const mid = lerpColor(palette[1],top,.37+.12*litSide);
+      const base = lerpColor(palette[0],palette[1],saturation);
+      const tint = c => rgb(c.map(v => v*factor));
+      const wash = p.createRadialGradient(1,-1,2,-5,-36,53);
+      wash.addColorStop(0,tint(base));
+      wash.addColorStop(.38,tint(mid));
+      wash.addColorStop(.70,tint(top));
+      wash.addColorStop(1,tint(lerpColor(top,mid,.32)));
+      p.fillStyle = wash;
+      p.shadowColor = '#081d3b66';
+      p.shadowBlur = 2.8;
+      p.shadowOffsetY = 1.3;
+      p.fill(path);
+      p.shadowColor = 'transparent';
+      p.strokeStyle = 'rgba(232,248,255,' + (.14+light*.31) + ')';
+      p.lineWidth = .85;
+      p.stroke(path);
+      p.clip(path);
+      const ridge = p.createRadialGradient(-9,-34,0,-9,-34,26);
+      ridge.addColorStop(0,'#f5fcff37');
+      ridge.addColorStop(1,'#e3f6ff00');
+      p.fillStyle = ridge;
+      p.fillRect(-38,-59,76,60);
+      for (let v=-3;v<=3;v++) {
+        p.beginPath(); p.moveTo(v*.7,-4);
+        p.quadraticCurveTo(v*4.8,-20,v*5.4+(rand()-.5)*3,-edge+rand()*6);
+        p.strokeStyle = v%2 === 0 ? '#fbffff29' : '#2249781c';
+        p.lineWidth = v === 0 ? .95 : .55;
+        p.stroke();
+      }
+      for (let k=0;k<29;k++) {
+        p.fillStyle = k%2 ? '#fafdff23' : '#335e901c';
+        p.fillRect((rand()-.5)*46,-rand()*48,1,.8);
+      }
+      p.restore();
+    }
+    p.fillStyle = '#254f70';
+    p.beginPath(); p.arc(0,0,5.1,0,tau); p.fill();
+    for (let i=0;i<5;i++) {
+      const a = i*tau/5+.5;
+      p.fillStyle = i<3 ? '#dcebc8' : '#86b0bb';
+      p.beginPath(); p.arc(Math.cos(a)*3.2,Math.sin(a)*2.4,1.7,0,tau); p.fill();
+    }
+    return surface;
+  }
+
+  const heads = [
+    {x:275,y:321,z:-77,r:113,tone:0,start:.46,phase:.2},
+    {x:423,y:232,z:-48,r:115,tone:1,start:.77,phase:1.2},
+    {x:568,y:300,z:-29,r:113,tone:3,start:.98,phase:2.1},
+    {x:632,y:384,z:6,r:101,tone:0,start:1.16,phase:.4},
+    {x:194,y:414,z:21,r:104,tone:1,start:.28,phase:1.5},
+    {x:332,y:447,z:61,r:113,tone:2,start:.48,phase:2.8},
+    {x:483,y:392,z:109,r:127,tone:0,start:.65,phase:1.0},
+    {x:556,y:482,z:37,r:87,tone:3,start:1.25,phase:3.1}
+  ];
+  const rand = random(608);
+  const golden = Math.PI*(3-Math.sqrt(5));
+  const florets = heads.flatMap((head,index) => {
+    const count = Math.round(head.r*1.17);
+    return Array.from({length:count},(_,i) => {
+      const nz = 1-1.11*(i+.5)/count;
+      const arc = i*golden + .22*(rand()-.5)+head.phase;
+      const disk = Math.sqrt(1-nz*nz);
+      const nx = Math.cos(arc)*disk, ny = Math.sin(arc)*disk;
+      const light = clamp(.34+.55*Math.max(0, -.54*nx-.62*ny+.64*nz)
+                          +.19*(rand()-.5) - .15*Math.max(ny,0)
+                          + (index===1 ? .12 : 0) - (index===7 ? .13 : 0));
+      const tilt = Math.max(.38,.40+.63*nz), foreshorten = 1-tilt;
+      const divisor = disk*disk || 1;
+      const ax = 1-foreshorten*nx*nx/divisor, ay = -foreshorten*nx*ny/divisor;
+      const dy = 1-foreshorten*ny*ny/divisor;
+      const turn = rand()*tau, co = Math.cos(turn), si = Math.sin(turn);
+      const size = 22.4*(.74+.51*rand())*(head.r/104)**.68;
+      const lobe = 1+.064*Math.sin(5*arc+head.phase)*disk
+                    +.076*Math.sin(8*nz+2.6*arc)+.055*(rand()-.5);
+      return {
+        index, nx:nx*lobe, ny:ny*lobe, z:head.z+head.r*nz*.9+rand()*8,
+        a:ax*co+ay*si, b:ay*co+dy*si,
+        c:-ax*si+ay*co, d:-ay*si+dy*co,
+        start:2.42+head.start+Math.hypot(nx+.40,ny+.1)*.85+rand()*1.6,
+        speed:1.9+rand()*1.16, size,
+        tile:atlas[head.tone][Math.floor(rand()*6)][Math.round(light*6)],
+        style:light>.65 ? '#96b8b9' : '#4a7780'
+      };
+    });
+  }).sort((a,b) => a.z-b.z);
+
+  const leaves = [
+    {head:4,t:.84,x:105,y:518,w:31,time:2.43,phase:3.5},
+    {head:3,t:.82,x:749,y:515,w:37,time:2.84,phase:4.2},
+    {head:0,t:.62,x:161,y:612,w:46,time:1.95,phase:.2},
+    {head:3,t:.64,x:705,y:565,w:58,time:2.65,phase:2.8},
+    {head:5,t:.64,x:208,y:673,w:47,time:2.14,phase:2.1},
+    {head:7,t:.71,x:646,y:640,w:49,time:2.78,phase:4.7},
+    {head:1,t:.38,x:300,y:742,w:30,time:3.10,phase:3.8}
+  ];
+
+  function stemPoint(curve,t) {
+    const s=1-t, a=s*s*s, b=3*s*s*t, c=3*s*t*t, d=t*t*t;
+    return [a*curve[0][0]+b*curve[1][0]+c*curve[2][0]+d*curve[3][0],
+            a*curve[0][1]+b*curve[1][1]+c*curve[2][1]+d*curve[3][1]];
+  }
+
+  function drawStem(curve,progress) {
+    if (progress<=0) return;
+    ctx.lineCap = 'round';
+    for (let i=0;i<42;i++) {
+      const v = i*progress/42;
+      const from = stemPoint(curve,v), to = stemPoint(curve,(i+1)*progress/42);
+      const strength = .40+.60*smooth(v/.56);
+      ctx.strokeStyle = rgb([43*strength,70*strength,54*strength]);
+      ctx.lineWidth = mix(3.5,1.2,v);
+      ctx.beginPath(); ctx.moveTo(...from); ctx.lineTo(...to); ctx.stroke();
+      ctx.strokeStyle = rgb([91*strength,121*strength,76*strength]);
+      ctx.lineWidth = mix(1.2,.55,v);
+      ctx.beginPath(); ctx.moveTo(from[0]-.8,from[1]); ctx.lineTo(to[0]-.8,to[1]); ctx.stroke();
+    }
+  }
+
+  function drawLeaf(start,end,spread,progress,phase,time) {
+    if (progress<.006) return;
+    const dx=end[0]-start[0], dy=end[1]-start[1];
+    const length=Math.hypot(dx,dy)*progress;
+    const w = spread * progress * (.53+.47*progress);
+    ctx.save();
+    ctx.translate(...start);
+    ctx.rotate(Math.atan2(dy,dx)+.058*Math.sin(time*.92+phase)+.43*(1-progress));
+    const spine = t => w*.21*Math.sin(Math.PI*t);
+    const side = (t,sign) => {
+      const scallop = .93+.07*Math.cos(t*95+phase);
+      const narrowing = Math.sin(Math.PI*t)**.86*(1.08-.23*t);
+      return spine(t)+sign*w*narrowing*scallop*(sign===1 ? .74 : 1);
+    };
+    for (const sign of [-1,1]) {
+      ctx.beginPath(); ctx.moveTo(0,0);
+      for (let i=1;i<=66;i++) ctx.lineTo(length*i/66,side(i/66,sign));
+      ctx.bezierCurveTo(length*.74,spine(.74),length*.25,spine(.25),0,0);
+      const wash=ctx.createLinearGradient(length*.4,-w*.75,length*.65,w*.73);
+      if (sign < 0) {
+        wash.addColorStop(0,'#4a755e'); wash.addColorStop(.43,'#284f40'); wash.addColorStop(1,'#0d211e');
+      } else {
+        wash.addColorStop(0,'#1e3e35'); wash.addColorStop(.58,'#365e46'); wash.addColorStop(1,'#132b26');
+      }
+      ctx.fillStyle=wash; ctx.fill();
+      ctx.strokeStyle='#446a54'; ctx.lineWidth=.55; ctx.stroke();
+      for (let i=1;i<10;i++) {
+        const t=i/11, e=Math.min(.96,t+.17-.07*t);
+        ctx.beginPath(); ctx.moveTo(length*t,spine(t));
+        ctx.quadraticCurveTo(length*(t+.12),side(e,sign)*.48,length*e,side(e,sign)*.91);
+        ctx.strokeStyle=sign < 0 ? '#8eab7964' : '#7d9f7157';
+        ctx.lineWidth=.55; ctx.stroke();
+      }
+    }
+    ctx.beginPath(); ctx.moveTo(0,0);
+    ctx.bezierCurveTo(length*.28,w*.22,length*.68,w*.24,length,0);
+    ctx.strokeStyle='#7b9b72'; ctx.lineWidth=1; ctx.stroke();
+    ctx.restore();
+  }
+
+  const dust = Array.from({length:24},() =>
+    [rand()*690+55,rand()*720+62,rand()*tau,.40+.92*rand(),.13+.29*rand()]);
+
+  function render(time) {
+    ctx.setTransform(canvas.width/width,0,0,canvas.height/height,0,0);
+    ctx.drawImage(background,0,0);
+    const scene = heads.map((head,index) => {
+      const sway = smooth((time-.2)/3.6)*(2.65*Math.sin(time*.87+head.phase)+.72*Math.sin(time*1.7+head.phase));
+      const curve=[[379+index*8,1027],[407+index*2,802],
+                   [mix(404,head.x,.68)-14,head.y+187],[head.x+sway,head.y+1.7*Math.sin(time*.89+head.phase)]];
+      const growth = smooth((time-.10-head.start*.53)/(2.92+index*.035));
+      const tip = stemPoint(curve,growth);
+      const shell = smooth((time-1.62-head.start*.57)/(2.55+head.start*.18));
+      return {curve,growth,tip,shell,sway};
+    });
+    for (const plant of scene) drawStem(plant.curve,plant.growth);
+    for (const leaf of leaves) {
+      const plant=scene[leaf.head];
+      const t=smooth((time-leaf.time)/2.08)*smooth((plant.growth-leaf.t)*4.5);
+      drawLeaf(stemPoint(plant.curve,leaf.t),[leaf.x+plant.sway*.91,leaf.y],
+               leaf.w,t,leaf.phase,time);
+    }
+    heads.forEach((head,index) => {
+      const {tip,shell} = scene[index];
+      if (shell<=.01) return;
+      const [x,y] = tip;
+      const radius = head.r*shell*(.54+.42*smooth((time-3.4-head.start)/4.65));
+      const base = ctx.createRadialGradient(x-radius*.18,y-radius*.14,1,x,y,radius);
+      base.addColorStop(0,'#304e65');
+      base.addColorStop(.61,'#243c54');
+      base.addColorStop(.82,'#21384baa');
+      base.addColorStop(1,'#1b2d4100');
+      ctx.globalAlpha=smooth((time-1.85-head.start*.5)/1.7);
+      ctx.fillStyle=base;
+      ctx.fillRect(x-radius,y-radius,2*radius,2*radius);
+    });
+    ctx.globalAlpha=1;
+    for (const flower of florets) {
+      const head=heads[flower.index], plant=scene[flower.index];
+      if (plant.shell<=.01) continue;
+      const opening=smooth((time-flower.start)/flower.speed);
+      const spread=plant.shell*(.56+.37*smooth((time-3.4-head.start)/4.65)+.07*opening);
+      const flex=.45*opening*Math.sin(time*.91+head.phase+3*flower.ny);
+      const x=plant.tip[0]+flower.nx*head.r*spread+flex;
+      const y=plant.tip[1]+flower.ny*head.r*spread*.88+(1-plant.shell)*12;
+      const base=flower.size*plant.shell;
+      if (opening<.39) {
+        ctx.fillStyle=flower.style;
+        ctx.globalAlpha=plant.shell*(.71-.60*smooth(opening/.39));
+        ctx.beginPath();
+        ctx.ellipse(x,y,base*.23,base*.29,flower.nx*.66,0,tau); ctx.fill();
+      }
+      if (opening>.025) {
+        ctx.save();
+        ctx.translate(x,y);
+        ctx.transform(flower.a,flower.b,flower.c,flower.d,0,0);
+        ctx.rotate((1-opening)*.32+.019*Math.sin(time*1.11+flower.start));
+        const w=base*(.25+.75*opening), h=w*(.65+.35*opening);
+        ctx.globalAlpha=smooth(opening/.23);
+        ctx.drawImage(flower.tile,-w,-h,2*w,2*h);
+        ctx.restore();
+      }
+      ctx.globalAlpha=1;
+    }
+    for (const [x,y,phase,radius,strength] of dust) {
+      const glow = Math.max(0,Math.sin(time*.55+phase))**4 * smooth(time/4)*strength;
+      if (glow<.008) continue;
+      ctx.globalAlpha=glow;
+      ctx.fillStyle='#b5dfed';
+      ctx.beginPath(); ctx.arc(x+8*Math.sin(time*.33+phase),y-time*1.1,radius,0,tau); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    const shade=ctx.createLinearGradient(0,820,0,1000);
+    shade.addColorStop(0,'#070c1200'); shade.addColorStop(1,'#070c12');
+    ctx.fillStyle=shade; ctx.fillRect(0,820,width,180);
+  }
+
+  let request=0;
+  button.addEventListener('click',() => {
+    cancelAnimationFrame(request);
+    if (reduce.matches) { render(duration); return; }
+    button.hidden=true;
+    const start=performance.now();
+    function tick(now) {
+      const time=(now-start)/1000;
+      render(time);
+      if (time>=hold && button.hidden) {
+        button.textContent='Посмотреть ещё раз';
+        button.hidden=false;
+      }
+      request=requestAnimationFrame(tick);
+    }
+    request=requestAnimationFrame(tick);
+  });
+  render(duration);
+  window.hydrangea = {render,duration};
+</script>
+</html>
